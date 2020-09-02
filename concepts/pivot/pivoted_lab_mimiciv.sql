@@ -4,29 +4,35 @@
 with i as
 (
   select
-    subject_id, icustay_id, intime, outtime
+    subject_id, stay_id, intime, outtime
     , lag (outtime) over (partition by subject_id order by intime) as outtime_lag
     , lead (intime) over (partition by subject_id order by intime) as intime_lead
-  from `physionet-data.mimiciii_clinical.icustays`
+  from `physionet-data.mimic_icu.icustays`
 )
 , iid_assign as
 (
   select
-    i.subject_id, i.icustay_id
+    i.subject_id, i.stay_id
     -- this rule is:
     --  if there are two hospitalizations within 24 hours, set the start/stop
     --  time as half way between the two admissions
     , case
         when i.outtime_lag is not null
-        and i.outtime_lag > (i.intime - interval '24' hour)
-          then i.intime - ((i.intime - i.outtime_lag)/2)
-      else i.intime - interval '12' hour
+        --and i.outtime_lag > (i.intime - interval '24' hour)
+        and i.outtime_lag > DATETIME_SUB(i.intime, interval '24' hour)
+          --then i.intime - ((i.intime - i.outtime_lag)/2)
+          then DATETIME_SUB(i.intime, interval cast(0.5*DATETIME_DIFF(i.outtime,i.intime,HOUR) as int64) hour)
+      --else i.intime - interval '12' hour
+      else DATETIME_SUB(i.intime,interval '12' hour)
       end as data_start
     , case
         when i.intime_lead is not null
-        and i.intime_lead < (i.outtime + interval '24' hour)
-          then i.outtime + ((i.intime_lead - i.outtime)/2)
-      else (i.outtime + interval '12' hour)
+        --and i.intime_lead < (i.outtime + interval '24' hour)
+        and i.intime_lead < DATETIME_ADD(i.outtime,interval '24' hour)
+          --then i.outtime + ((i.intime_lead - i.outtime)/2)
+          then DATETIME_ADD(i.outtime, interval cast(0.5*DATETIME_DIFF(i.intime_lead,i.outtime,hour) as INT64) hour)
+      --else (i.outtime + interval '12' hour)
+      else DATETIME_ADD(i.outtime,interval '12' hour)
       end as data_end
     from i
 )
@@ -37,7 +43,7 @@ with i as
     subject_id, hadm_id, admittime, dischtime
     , lag (dischtime) over (partition by subject_id order by admittime) as dischtime_lag
     , lead (admittime) over (partition by subject_id order by admittime) as admittime_lead
-  from `physionet-data.mimiciii_clinical.admissions`
+  from `physionet-data.mimic_core.admissions`
 )
 , adm as
 (
@@ -48,15 +54,21 @@ with i as
     --  time as half way between the two admissions
     , case
         when h.dischtime_lag is not null
-        and h.dischtime_lag > (h.admittime - interval '24' hour)
-          then h.admittime - ((h.admittime - h.dischtime_lag)/2)
-      else h.admittime - interval '12' hour
+        --and h.dischtime_lag > (h.admittime - interval '24' hour)
+        and h.dischtime_lag > DATETIME_SUB(h.admittime,interval '24' hour)
+          --then h.admittime - ((h.admittime - h.dischtime_lag)/2)
+          then DATETIME_SUB(h.admittime, interval cast(0.5*DATETIME_DIFF(h.admittime,h.dischtime_lag,hour) as INT64) hour)
+      --else h.admittime - interval '12' hour
+      else DATETIME_SUB(h.admittime,interval '12' hour) 
       end as data_start
     , case
         when h.admittime_lead is not null
-        and h.admittime_lead < (h.dischtime + interval '24' hour)
-          then h.dischtime + ((h.admittime_lead - h.dischtime)/2)
-      else (h.dischtime + interval '12' hour)
+        --and h.admittime_lead < (h.dischtime + interval '24' hour)
+        and h.admittime_lead < DATETIME_ADD(h.dischtime,interval '24' hour)
+          --then h.dischtime + ((h.admittime_lead - h.dischtime)/2)
+          then DATETIME_ADD(h.dischtime,interval cast(0.5*DATETIME_DIFF(h.admittime_lead,h.dischtime,hour) as int64) hour)
+      --else (h.dischtime + interval '12' hour)
+      else DATETIME_ADD(h.dischtime,interval '12' hour)
       end as data_end
     from h
 )
@@ -155,7 +167,7 @@ FROM
       WHEN itemid = 51301 and valuenum >  1000 THEN null -- 'WBC'
     ELSE valuenum
     END AS valuenum
-  FROM `physionet-data.mimiciii_clinical.labevents` le
+  FROM `physionet-data.mimic_hosp.labevents` le
   WHERE le.ITEMID in
   (
     -- comment is: LABEL | CATEGORY | FLUID | NUMBER OF ROWS IN LABEVENTS
@@ -191,7 +203,7 @@ FROM
 GROUP BY pvt.subject_id, pvt.charttime
 )
 select
-  iid.icustay_id, adm.hadm_id, le_avg.*
+  iid.stay_id, adm.hadm_id, le_avg.*
 from le_avg
 left join adm
   on le_avg.subject_id  = adm.subject_id
