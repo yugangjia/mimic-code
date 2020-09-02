@@ -29,9 +29,9 @@
 -- Note:
 --  The score is calculated for *all* ICU patients, with the assumption that the user will subselect appropriate ICUSTAY_IDs.
 --  For example, the score is calculated for neonates, but it is likely inappropriate to actually use the score values for these patients.
--- Reent changes to make this code work for MIMIC-IV dataset by Yugang Jia
---change icustay_id to stay_id
---
+--Reent changes to make this code work for MIMIC-IV dataset by Yugang Jia
+--  change icustay_id to stay_id
+--  delete code relevant with inputevents_cv as this does not exist in MIMICIV anymore
 with wt AS
 (
   SELECT ie.stay_id
@@ -74,36 +74,6 @@ with wt AS
 --    and echo.charttime < DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
 --  group by ie.icustay_id
 --)
-, vaso_cv as
-(
-  select ie.stay_id
-    -- case statement determining whether the ITEMID is an instance of vasopressor usage
-    , max(case
-            when itemid = 30047 then rate / wt.weight -- measured in mcgmin -- remove ec.weight due to lack of echo data
-            when itemid = 30120 then rate -- measured in mcgkgmin ** there are clear errors, perhaps actually mcgmin
-            else null
-          end) as rate_norepinephrine
-
-    , max(case
-            when itemid =  30044 then rate / wt.weight -- measured in mcgmin
-            when itemid in (30119,30309) then rate -- measured in mcgkgmin
-            else null
-          end) as rate_epinephrine
-
-    , max(case when itemid in (30043,30307) then rate end) as rate_dopamine
-    , max(case when itemid in (30042,30306) then rate end) as rate_dobutamine
-
-  FROM `physionet-data.mimic_icu.icustays` ie
-  inner join `physionet-data.mimic_icu.inputevents` cv
-    on ie.stay_id = cv.stay_id and cv.starttime between ie.intime and DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
-  left join wt
-    on ie.stay_id = wt.stay_id
-  --left join echo2 ec
-  --  on ie.stay_id = ec.stay_id
-  where itemid in (30047,30120,30044,30119,30309,30043,30307,30042,30306)
-  and rate is not null
-  group by ie.stay_id
-)
 , vaso_mv as
 (
   select ie.stay_id
@@ -149,10 +119,10 @@ with wt AS
 (
 select ie.stay_id
   , v.meanbp_min
-  , coalesce(cv.rate_norepinephrine, mv.rate_norepinephrine) as rate_norepinephrine
-  , coalesce(cv.rate_epinephrine, mv.rate_epinephrine) as rate_epinephrine
-  , coalesce(cv.rate_dopamine, mv.rate_dopamine) as rate_dopamine
-  , coalesce(cv.rate_dobutamine, mv.rate_dobutamine) as rate_dobutamine
+  , mv.rate_norepinephrine as rate_norepinephrine
+  , mv.rate_epinephrine as rate_epinephrine
+  , mv.rate_dopamine as rate_dopamine
+  , mv.rate_dobutamine as rate_dobutamine
 
   , l.creatinine_max
   , l.bilirubin_max
@@ -165,8 +135,6 @@ select ie.stay_id
 
   , gcs.mingcs
 FROM `physionet-data.mimic_icu.icustays` ie
-left join vaso_cv cv
-  on ie.stay_id = cv.stay_id
 left join vaso_mv mv
   on ie.stay_id = mv.stay_id
 left join pafi2 pf
