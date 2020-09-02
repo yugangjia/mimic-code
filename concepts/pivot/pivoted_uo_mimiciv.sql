@@ -1,12 +1,12 @@
 select
-  icustay_id
+  stay_id
   , charttime
   , sum(urineoutput) as urineoutput
 from
 (
   select
   -- patient identifiers
-    oe.icustay_id
+    oe.stay_id
   , oe.charttime
   -- volumes associated with urine output ITEMIDs
   -- note we consider input of GU irrigant as a negative volume
@@ -14,10 +14,10 @@ from
       when oe.itemid = 227488 and oe.value > 0 then -1*oe.value
       else oe.value
     end as urineoutput
-  from `physionet-data.mimiciii_clinical.outputevents` oe
+  from `physionet-data.mimic_icu.outputevents` oe
 -- exclude rows marked as error
-where (oe.iserror IS NULL OR oe.iserror != 1)
-  and itemid in
+--where (oe.iserror IS NULL OR oe.iserror != 1)
+  where itemid in
   (
   -- these are the most frequently occurring urine output observations in CareVue
   40055, -- "Urine Out Foley"
@@ -50,5 +50,5 @@ where (oe.iserror IS NULL OR oe.iserror != 1)
   227489  -- GU Irrigant/Urine Volume Out
   )
 ) 
-group by icustay_id, charttime
-order by icustay_id, charttime;
+group by stay_id, charttime
+order by stay_id, charttime;
