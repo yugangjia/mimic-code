@@ -1,21 +1,20 @@
-
 with stg_spo2 as
 (
-  select subject_id, hadm_id, icustay_id, charttime
+  select subject_id, hadm_id, stay_id, charttime
     -- max here is just used to group SpO2 by charttime
     , max(case when valuenum <= 0 or valuenum > 100 then null else valuenum end) as SpO2
-  FROM `physionet-data.mimiciii_clinical.chartevents`
+  FROM `physionet-data.mimic_icu.chartevents`
   -- o2 sat
   where ITEMID in
   (
     646 -- SpO2
   , 220277 -- O2 saturation pulseoxymetry
   )
-  group by subject_id, hadm_id, icustay_id, charttime
+  group by subject_id, hadm_id, stay_id, charttime
 )
 , stg_fio2 as
 (
-  select subject_id, hadm_id, icustay_id, charttime
+  select subject_id, hadm_id, stay_id, charttime
     -- pre-process the FiO2s to ensure they are between 21-100%
     , max(
         case
@@ -37,7 +36,7 @@ with stg_spo2 as
             then valuenum * 100
       else null end
     ) as fio2_chartevents
-  FROM `physionet-data.mimiciii_clinical.chartevents`
+  FROM `physionet-data.mimic_icu.chartevents`
   where ITEMID in
   (
     3420 -- FiO2
@@ -46,18 +45,18 @@ with stg_spo2 as
   , 3422 -- FiO2 [measured]
   )
   -- exclude rows marked as error
-  AND (error IS NULL OR error = 0)
-  group by subject_id, hadm_id, icustay_id, charttime
+--  AND (error IS NULL OR error = 0)
+  group by subject_id, hadm_id, stay_id, charttime
 )
 , stg2 as
 (
 select bg.*
-  , ROW_NUMBER() OVER (partition by bg.icustay_id, bg.charttime order by s1.charttime DESC) as lastRowSpO2
+  , ROW_NUMBER() OVER (partition by bg.stay_id, bg.charttime order by s1.charttime DESC) as lastRowSpO2
   , s1.spo2
-from `physionet-data.mimiciii_derived.blood_gas_first_day` bg
+from `vvs-marketscan.yugang_dev.blood_gas_first_day` bg
 left join stg_spo2 s1
   -- same patient
-  on  bg.icustay_id = s1.icustay_id
+  on  bg.stay_id = s1.stay_id
   -- spo2 occurred at most 2 hours before this blood gas
   and s1.charttime >= DATETIME_SUB(bg.charttime, INTERVAL '2' HOUR)
   and s1.charttime <= bg.charttime
@@ -66,7 +65,7 @@ where bg.po2 is not null
 , stg3 as
 (
 select bg.*
-  , ROW_NUMBER() OVER (partition by bg.icustay_id, bg.charttime order by s2.charttime DESC) as lastRowFiO2
+  , ROW_NUMBER() OVER (partition by bg.stay_id, bg.charttime order by s2.charttime DESC) as lastRowFiO2
   , s2.fio2_chartevents
 
   -- create our specimen prediction
@@ -88,14 +87,14 @@ select bg.*
 from stg2 bg
 left join stg_fio2 s2
   -- same patient
-  on  bg.icustay_id = s2.icustay_id
+  on  bg.stay_id = s2.stay_id
   -- fio2 occurred at most 4 hours before this blood gas
   and s2.charttime between DATETIME_SUB(bg.charttime, INTERVAL '4' HOUR) and bg.charttime
 where bg.lastRowSpO2 = 1 -- only the row with the most recent SpO2 (if no SpO2 found lastRowSpO2 = 1)
 )
 
 select subject_id, hadm_id,
-icustay_id, charttime
+stay_id, charttime
 , specimen -- raw data indicating sample type, only present 80% of the time
 
 -- prediction of specimen for missing data
@@ -151,4 +150,4 @@ from stg3
 where lastRowFiO2 = 1 -- only the most recent FiO2
 -- restrict it to *only* arterial samples
 and (specimen = 'ART' or specimen_prob > 0.75)
-order by icustay_id, charttime;
+order by stay_id, charttime;
