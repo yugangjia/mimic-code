@@ -23,7 +23,7 @@
 
 with base as
 (
-  SELECT pvt.ICUSTAY_ID
+  SELECT pvt.STAY_ID
   , pvt.charttime
 
   -- Easier names - note we coalesced Metavision and CareVue IDs below
@@ -39,10 +39,10 @@ with base as
     end as EndoTrachFlag
 
   , ROW_NUMBER ()
-          OVER (PARTITION BY pvt.ICUSTAY_ID ORDER BY pvt.charttime ASC) as rn
+          OVER (PARTITION BY pvt.STAY_ID ORDER BY pvt.charttime ASC) as rn
 
   FROM  (
-  select l.ICUSTAY_ID
+  select l.STAY_ID
   -- merge the ITEMIDs so that the pivot applies to both metavision/carevue data
   , case
       when l.ITEMID in (723,223900) then 723
@@ -61,11 +61,11 @@ with base as
       end
     as VALUENUM
   , l.CHARTTIME
-  FROM `physionet-data.mimiciii_clinical.chartevents` l
+  FROM `physionet-data.mimic_icu.chartevents` l
 
   -- get intime for charttime subselection
-  inner join `physionet-data.mimiciii_clinical.icustays` b
-    on l.icustay_id = b.icustay_id
+  inner join `physionet-data.mimic_icu.icustays` b
+    on l.stay_id = b.stay_id
 
   -- Isolate the desired GCS variables
   where l.ITEMID in
@@ -79,9 +79,8 @@ with base as
   -- Only get data for the first 24 hours
   and l.charttime between b.intime and DATETIME_ADD(b.intime, INTERVAL '1' DAY)
   -- exclude rows marked as error
-  AND (l.error IS NULL OR l.error = 0)
   ) pvt
-  group by pvt.ICUSTAY_ID, pvt.charttime
+  group by pvt.STAY_ID, pvt.charttime
 )
 , gcs as (
   select b.*
@@ -115,18 +114,18 @@ with base as
   from base b
   -- join to itself within 6 hours to get previous value
   left join base b2
-    on b.ICUSTAY_ID = b2.ICUSTAY_ID and b.rn = b2.rn+1 and b2.charttime > DATETIME_SUB(b.charttime, INTERVAL '6' HOUR)
+    on b.STAY_ID = b2.STAY_ID and b.rn = b2.rn+1 and b2.charttime > DATETIME_SUB(b.charttime, INTERVAL '6' HOUR)
 )
 , gcs_final as (
   select gcs.*
   -- This sorts the data by GCS, so rn=1 is the the lowest GCS values to keep
   , ROW_NUMBER ()
-          OVER (PARTITION BY gcs.ICUSTAY_ID
+          OVER (PARTITION BY gcs.STAY_ID
                 ORDER BY gcs.GCS
                ) as IsMinGCS
   from gcs
 )
-select ie.subject_id, ie.hadm_id, ie.icustay_id
+select ie.subject_id, ie.hadm_id, ie.stay_id
 -- The minimum GCS is determined by the above row partition, we only join if IsMinGCS=1
 , GCS as mingcs
 , coalesce(GCSMotor,GCSMotorPrev) as gcsmotor
@@ -135,7 +134,7 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
 , EndoTrachFlag as endotrachflag
 
 -- subselect down to the cohort of eligible patients
-FROM `physionet-data.mimiciii_clinical.icustays` ie
+FROM `physionet-data.mimic_icu.icustays` ie
 left join gcs_final gs
-  on ie.icustay_id = gs.icustay_id and gs.IsMinGCS = 1
-ORDER BY ie.icustay_id;
+  on ie.stay_id = gs.stay_id and gs.IsMinGCS = 1
+ORDER BY ie.stay_id;
