@@ -29,7 +29,9 @@
 -- Note:
 --  The score is calculated for *all* ICU patients, with the assumption that the user will subselect appropriate ICUSTAY_IDs.
 --  For example, the score is calculated for neonates, but it is likely inappropriate to actually use the score values for these patients.
---  Reent changes to make this code work for MIMIC-IV dataset by Yugang Jia
+-- Reent changes to make this code work for MIMIC-IV dataset by Yugang Jia
+--change icustay_id to stay_id
+--
 with wt AS
 (
   SELECT ie.stay_id
