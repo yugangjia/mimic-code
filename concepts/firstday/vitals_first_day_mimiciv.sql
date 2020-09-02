@@ -1,7 +1,7 @@
 -- This query pivots the vital signs for the first 24 hours of a patient's stay
 -- Vital signs include heart rate, blood pressure, respiration rate, and temperature
 
-SELECT pvt.subject_id, pvt.hadm_id, pvt.icustay_id
+SELECT pvt.subject_id, pvt.hadm_id, pvt.stay_id
 
 -- Easier names
 , min(case when VitalID = 1 then valuenum ELSE NULL END) AS heartrate_min
@@ -30,7 +30,7 @@ SELECT pvt.subject_id, pvt.hadm_id, pvt.icustay_id
 , avg(case when VitalID = 8 then valuenum ELSE NULL END) AS glucose_mean
 
 FROM  (
-  select ie.subject_id, ie.hadm_id, ie.icustay_id
+  select ie.subject_id, ie.hadm_id, ie.stay_id
   , case
     when itemid in (211,220045) and valuenum > 0 and valuenum < 300 then 1 -- HeartRate
     when itemid in (51,442,455,6701,220179,220050) and valuenum > 0 and valuenum < 400 then 2 -- SysBP
@@ -46,14 +46,13 @@ FROM  (
       -- convert F to C
   , case when itemid in (223761,678) then (valuenum-32)/1.8 else valuenum end as valuenum
 
-  from `physionet-data.mimiciii_clinical.icustays` ie
-  left join `physionet-data.mimiciii_clinical.chartevents` ce
-  on ie.icustay_id = ce.icustay_id
+  from `physionet-data.mimic_icu.icustays` ie
+  left join `physionet-data.mimic_icu.chartevents` ce
+  on ie.stay_id = ce.stay_id
   and ce.charttime between ie.intime and DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
   and DATETIME_DIFF(ce.charttime, ie.intime, SECOND) > 0
   and DATETIME_DIFF(ce.charttime, ie.intime, HOUR) <= 24
   -- exclude rows marked as error
-  and (ce.error IS NULL or ce.error = 0)
   where ce.itemid in
   (
   -- HEART RATE
@@ -114,5 +113,5 @@ FROM  (
 
   )
 ) pvt
-group by pvt.subject_id, pvt.hadm_id, pvt.icustay_id
-order by pvt.subject_id, pvt.hadm_id, pvt.icustay_id;
+group by pvt.subject_id, pvt.hadm_id, pvt.stay_id
+order by pvt.subject_id, pvt.hadm_id, pvt.stay_id;
