@@ -30,7 +30,7 @@
 
 with base as
 (
-  select ce.icustay_id, ce.charttime
+  select ce.stay_id, ce.charttime
   -- pivot each value into its own column
   , max(case when ce.ITEMID in (454,223901) then ce.valuenum else null end) as gcsmotor
   , max(case
@@ -48,8 +48,8 @@ with base as
     else 0 end)
     as endotrachflag
   , ROW_NUMBER ()
-          OVER (PARTITION BY ce.icustay_id ORDER BY ce.charttime ASC) as rn
-  FROM `physionet-data.mimiciii_clinical.chartevents` ce
+          OVER (PARTITION BY ce.stay_id ORDER BY ce.charttime ASC) as rn
+  FROM `physionet-data.mimic_icu.chartevents` ce
   -- Isolate the desired GCS variables
   where ce.ITEMID in
   (
@@ -60,8 +60,8 @@ with base as
     , 223900, 223901, 220739
   )
   -- exclude rows marked as error
-  AND (ce.error IS NULL OR ce.error != 1)
-  group by ce.icustay_id, ce.charttime
+  --AND (ce.error IS NULL OR ce.error != 1)
+  group by ce.stay_id, ce.charttime
 )
 , gcs_stg0 as (
   select b.*
@@ -95,7 +95,7 @@ with base as
   from base b
   -- join to itself within 6 hours to get previous value
   left join base b2
-    on b.icustay_id = b2.icustay_id
+    on b.stay_id = b2.stay_id
     and b.rn = b2.rn+1
     and b2.charttime > DATETIME_SUB(b.charttime, INTERVAL 6 HOUR)
 )
@@ -104,7 +104,7 @@ with base as
 -- truncate charttime to the hour
 , gcs_stg1 as
 (
-  select gs.icustay_id, gs.charttime
+  select gs.stay_id, gs.charttime
   , gs.gcs
   , coalesce(gcsmotor,gcsmotorprev) as gcsmotor
   , coalesce(gcsverbal,gcsverbalprev) as gcsverbal
@@ -120,7 +120,7 @@ with base as
 --  (i) complete data, (ii) non-sedated GCS, (iii) lowest GCS, (iv) charttime
 , gcs_priority as
 (
-  select icustay_id
+  select stay_id
     , charttime
     , gcs
     , gcsmotor
@@ -129,12 +129,12 @@ with base as
     , endotrachflag
     , ROW_NUMBER() over
       (
-        PARTITION BY icustay_id, charttime
+        PARTITION BY stay_id, charttime
         ORDER BY components_measured DESC, endotrachflag, gcs, charttime DESC
       ) as rn
   from gcs_stg1
 )
-select icustay_id
+select stay_id
   , charttime
   , gcs
   , gcsmotor
@@ -143,4 +143,4 @@ select icustay_id
   , endotrachflag
 from gcs_priority gs
 where rn = 1
-ORDER BY icustay_id, charttime;
+ORDER BY stay_id, charttime;
