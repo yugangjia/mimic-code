@@ -34,25 +34,25 @@
 
 with surgflag as
 (
-  select ie.icustay_id
+  select ie.stay_id
     , max(case
         when lower(curr_service) like '%surg%' then 1
         when curr_service = 'ORTHO' then 1
     else 0 end) as surgical
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  left join `physionet-data.mimiciii_clinical.services` se
+  FROM `physionet-data.mimic_icu.icustays` ie
+  left join `physionet-data.mimic_hosp.services` se
     on ie.hadm_id = se.hadm_id
     and se.transfertime < DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
-  group by ie.icustay_id
+  group by ie.stay_id
 )
 , cohort as
 (
-select ie.subject_id, ie.hadm_id, ie.icustay_id
+select ie.subject_id, ie.hadm_id, ie.stay_id
       , ie.intime
       , ie.outtime
       , adm.deathtime
       , DATETIME_DIFF(ie.intime, adm.admittime, MINUTE) as preiculos
-      , DATETIME_DIFF(ie.intime, pat.dob, YEAR) as age
+      ,anchor_age as age
       , gcs.mingcs
       , vital.heartrate_max
       , vital.heartrate_min
@@ -75,8 +75,8 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
 
       -- age group
       , case
-        when DATETIME_DIFF(ie.intime, pat.dob, YEAR) <= 1 then 'neonate'
-        when DATETIME_DIFF(ie.intime, pat.dob, YEAR) <= 15 then 'middle'
+        when anchor_age <= 1 then 'neonate'
+        when anchor_age <= 15 then 'middle'
         else 'adult' end as icustay_age_group
 
       -- mortality flags
@@ -90,26 +90,26 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
           else 0 end
         as icustay_expire_flag
       , adm.hospital_expire_flag
-FROM `physionet-data.mimiciii_clinical.icustays` ie
-inner join `physionet-data.mimiciii_clinical.admissions` adm
+FROM `physionet-data.mimic_icu.icustays` ie
+inner join `physionet-data.mimic_core.admissions` adm
   on ie.hadm_id = adm.hadm_id
-inner join `physionet-data.mimiciii_clinical.patients` pat
+inner join `physionet-data.mimic_core.patients` pat
   on ie.subject_id = pat.subject_id
 left join surgflag sf
-  on ie.icustay_id = sf.icustay_id
+  on ie.stay_id = sf.stay_id
 -- join to custom tables to get more data....
-left join `physionet-data.mimiciii_derived.gcs_first_day` gcs
-  on ie.icustay_id = gcs.icustay_id
-left join `physionet-data.mimiciii_derived.vitals_first_day` vital
-  on ie.icustay_id = vital.icustay_id
-left join `physionet-data.mimiciii_derived.urine_output_first_day` uo
-  on ie.icustay_id = uo.icustay_id
-left join `physionet-data.mimiciii_derived.ventilation_first_day` vent
-  on ie.icustay_id = vent.icustay_id
+left join `vvs-marketscan.yugang_dev.gcs_first_day` gcs
+  on ie.stay_id = gcs.stay_id
+left join `vvs-marketscan.yugang_dev.vitals_first_day` vital
+  on ie.stay_id = vital.stay_id
+left join `vvs-marketscan.yugang_dev.urine_output_first_day` uo
+  on ie.stay_id = uo.stay_id
+left join `vvs-marketscan.yugang_dev.ventilation_first_day` vent
+  on ie.stay_id = vent.stay_id
 )
 , scorecomp as
 (
-select co.subject_id, co.hadm_id, co.icustay_id
+select co.subject_id, co.hadm_id, co.stay_id
 , co.icustay_age_group
 , co.icustay_expire_flag
 , co.hospital_expire_flag
@@ -231,7 +231,7 @@ select s.*
 from scorecomp s
 )
 select
-  subject_id, hadm_id, icustay_id
+  subject_id, hadm_id, stay_id
   , icustay_age_group
   , hospital_expire_flag
   , icustay_expire_flag
@@ -249,4 +249,4 @@ select
   , mechvent, mechvent_score
   , electivesurgery, electivesurgery_score
 from score
-order by icustay_id;
+order by stay_id;
