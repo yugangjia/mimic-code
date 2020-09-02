@@ -6,7 +6,7 @@
 
 with pvt as
 ( -- begin query that extracts the data
-  select ie.subject_id, ie.hadm_id, ie.icustay_id
+  select ie.subject_id, ie.hadm_id, ie.stay_id
   -- here we assign labels to ITEMIDs
   -- this also fuses together multiple ITEMIDs containing the same data
       , case
@@ -59,8 +59,8 @@ with pvt as
         else valuenum
         end as valuenum
 
-    FROM `physionet-data.mimiciii_clinical.icustays` ie
-    left join `physionet-data.mimiciii_clinical.labevents` le
+    FROM `physionet-data.mimic_icu.icustays` ie
+    left join `physionet-data.mimic_hosp.labevents` le
       on le.subject_id = ie.subject_id and le.hadm_id = ie.hadm_id
       and le.charttime between (DATETIME_SUB(ie.intime, INTERVAL '6' HOUR)) and (DATETIME_ADD(ie.intime, INTERVAL '1' DAY))
       and le.ITEMID in
@@ -72,7 +72,7 @@ with pvt as
         , 51545
       )
 )
-select pvt.SUBJECT_ID, pvt.HADM_ID, pvt.ICUSTAY_ID, pvt.CHARTTIME
+select pvt.SUBJECT_ID, pvt.HADM_ID, pvt.STAY_ID, pvt.CHARTTIME
 , max(case when label = 'SPECIMEN' then value else null end) as specimen
 , max(case when label = 'AADO2' then valuenum else null end) as aado2
 , max(case when label = 'BASEEXCESS' then valuenum else null end) as baseexcess
@@ -102,5 +102,5 @@ select pvt.SUBJECT_ID, pvt.HADM_ID, pvt.ICUSTAY_ID, pvt.CHARTTIME
 , max(case when label = 'VENTILATIONRATE' then valuenum else null end) as ventilationrate
 , max(case when label = 'VENTILATOR' then valuenum else null end) as ventilator
 from pvt
-group by pvt.subject_id, pvt.hadm_id, pvt.icustay_id, pvt.CHARTTIME
-order by pvt.subject_id, pvt.hadm_id, pvt.icustay_id, pvt.CHARTTIME;
+group by pvt.subject_id, pvt.hadm_id, pvt.stay_id, pvt.CHARTTIME
+order by pvt.subject_id, pvt.hadm_id, pvt.stay_id, pvt.CHARTTIME;
