@@ -4,7 +4,7 @@
 
 select
   -- patient identifiers
-  ie.subject_id, ie.hadm_id, ie.icustay_id
+  ie.subject_id, ie.hadm_id, ie.stay_id
 
   -- volumes associated with urine output ITEMIDs
   , sum(
@@ -13,11 +13,11 @@ select
         when oe.itemid = 227488 and oe.value > 0 then -1*oe.value
         else oe.value
     end) as urineoutput
-FROM `physionet-data.mimiciii_clinical.icustays` ie
+FROM `physionet-data.mimic_icu.icustays` ie
 -- Join to the outputevents table to get urine output
-left join `physionet-data.mimiciii_clinical.outputevents` oe
+left join `physionet-data.mimic_icu.outputevents` oe
 -- join on all patient identifiers
-on ie.subject_id = oe.subject_id and ie.hadm_id = oe.hadm_id and ie.icustay_id = oe.icustay_id
+on ie.subject_id = oe.subject_id and ie.hadm_id = oe.hadm_id and ie.stay_id = oe.stay_id
 -- and ensure the data occurs during the first day
 and oe.charttime between ie.intime and (DATETIME_ADD(ie.intime, INTERVAL '1' DAY)) -- first ICU day
 where itemid in
@@ -52,5 +52,5 @@ where itemid in
 227488, -- GU Irrigant Volume In
 227489  -- GU Irrigant/Urine Volume Out
 )
-group by ie.subject_id, ie.hadm_id, ie.icustay_id
-order by ie.subject_id, ie.hadm_id, ie.icustay_id;
+group by ie.subject_id, ie.hadm_id, ie.stay_id
+order by ie.subject_id, ie.hadm_id, ie.stay_id;
