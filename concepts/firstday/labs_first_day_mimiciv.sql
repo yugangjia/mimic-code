@@ -3,7 +3,7 @@
 -- Have already confirmed that the unit of measurement is always the same: null or the correct unit
 
 SELECT
-  pvt.subject_id, pvt.hadm_id, pvt.icustay_id
+  pvt.subject_id, pvt.hadm_id, pvt.stay_id
 
   , min(CASE WHEN label = 'ANION GAP' THEN valuenum ELSE NULL END) AS aniongap_min
   , max(CASE WHEN label = 'ANION GAP' THEN valuenum ELSE NULL END) AS aniongap_max
@@ -47,7 +47,7 @@ SELECT
 
 FROM
 ( -- begin query that extracts the data
-  SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
+  SELECT ie.subject_id, ie.hadm_id, ie.stay_id
   -- here we assign labels to ITEMIDs
   -- this also fuses together multiple ITEMIDs containing the same data
   , CASE
@@ -112,9 +112,9 @@ FROM
     ELSE le.valuenum
     END as valuenum
 
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
+  FROM `physionet-data.mimic_icu.icustays` ie
 
-  LEFT JOIN `physionet-data.mimiciii_clinical.labevents` le
+  LEFT JOIN `physionet-data.mimic_hosp.labevents` le
     ON le.subject_id = ie.subject_id AND le.hadm_id = ie.hadm_id
     AND le.charttime BETWEEN (DATETIME_SUB(ie.intime, INTERVAL '6' HOUR)) AND (DATETIME_ADD(ie.intime, INTERVAL '1' DAY))
     AND le.ITEMID in
@@ -149,5 +149,5 @@ FROM
     )
     AND valuenum IS NOT null AND valuenum > 0 -- lab values cannot be 0 and cannot be negative
 ) pvt
-GROUP BY pvt.subject_id, pvt.hadm_id, pvt.icustay_id
-ORDER BY pvt.subject_id, pvt.hadm_id, pvt.icustay_id;
+GROUP BY pvt.subject_id, pvt.hadm_id, pvt.stay_id
+ORDER BY pvt.subject_id, pvt.hadm_id, pvt.stay_id;
